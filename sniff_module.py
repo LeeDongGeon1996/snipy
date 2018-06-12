@@ -69,30 +69,57 @@ def sniffing_one_header(host, prn=None):
     finish_sniffing(sniffer)
 
 
-def sniffing_all(host, filter=None):
+def sniffing_all(host, src_filter=None, dst_filter=None, file_name=None):
 
     sniffer = prepare_sniffing(host)
+
+    if file_name is not None:
+        fd = open(file_name, 'wt+')
 
     print('[Start Sniffing All]')
     count = 0
     try:
         while True:
+            icmp_header = None
             packet = sniffer.recvfrom(65565)
 
-            #filter
-            if filter is not None:
-                if packet[1][0] not in filter:
+            #source IP filter
+            if src_filter is not None:
+                if packet[1][0] not in src_filter:
+                    continue
+
+            ipheader = _extract_ipheader(packet)
+
+            #destination IP filter
+            if dst_filter is not None:
+                if ipheader.destination_ip not in dst_filter:
                     continue
 
             count += 1
             print('\n#####%d PACKET######' %count)
-            print('adress : ' + str(packet[1]))
-            ipheader = _extract_ipheader(packet, print)
+            #print('adress : ' + str(packet[1]))
+            _print_ipheader(ipheader)
+
+            if file_name is not None:
+                fd.write('\n\n' + str(ipheader) + '\n')
+
             if ipheader.protocol is 'ICMP':
-                icmp_header = _extract_icmp_header(packet, ipheader.header_length, print)
+                icmp_header = _extract_icmp_header(packet, ipheader.header_length)
+                _print_icmp_header(icmp_header)
+                
+                if file_name is not None:
+                    fd.write(str(icmp_header) + '\n')
+                    fd.write(str(packet[0][ipheader.header_length+len(icmp_header):]) + '\n')
+            else:
+                if file_name is not None:
+                    fd.write(str(packet[0][ipheader.header_length:]) + '\n')
+            
 
     except KeyboardInterrupt:
         finish_sniffing(sniffer)
+
+    if file_name is not None:
+        fd.close()
 
 
 def sniffing_all_bite(host):
@@ -110,32 +137,8 @@ def sniffing_all_bite(host):
 
 def _extract_icmp_header(packet, start_offset, prn=None):
 
-    formatted = _formatting_icmp_header(packet[0][start_offset:start_offset+8])
+    raw_icmp_header = packet[0][start_offset:start_offset+8]
 
-    if prn is print:
-        print('ICMP type \t: %s' %formatted.type)
-        print('ICMP code \t: %s' %formatted.code)
-        print('ICMP checksum \t: %s' %formatted.header_checksum)
-        print('ICMP message \t: %s' %formatted.icmp_message)
-
-    return formatted
-
-
-def _extract_ipheader(packet, prn=None):
-    
-    formatted = _formatting_ipheader(packet[0][:20])
-
-    if prn is print:
-        #print('#####%d PACKET######' %count)
-        print('Datagram SIZE \t: %s' %formatted.entire_packet_length)
-        print('Protocol \t: %s' %formatted.protocol)
-        print('Source IP \t: %s' %formatted.source_ip)
-        print('Destination IP \t: %s' %formatted.destination_ip)
-
-    return formatted
-
-
-def _formatting_icmp_header(raw_icmp_header, prn=None):
     #1,1,2
     unpacked = struct.unpack('!BBH4s', raw_icmp_header)
 
@@ -160,8 +163,10 @@ def _formatting_icmp_header(raw_icmp_header, prn=None):
     return formatted
 
 
+def _extract_ipheader(packet, prn=None):
 
-def _formatting_ipheader(raw_ipheader, prn=None):
+    raw_ipheader = packet[0][:20]
+
     #1,1,2,2,2,1,1,2,4,4
     unpacked = struct.unpack('!BBHHHBBH4s4s', raw_ipheader)
     
@@ -200,6 +205,31 @@ def _formatting_ipheader(raw_ipheader, prn=None):
         print(formatted)
     
     return formatted
+
+
+def _print_ipheader(ipheader):
+
+    if type(ipheader).__name__.__ne__('ipheader_format'):
+        print('Wrong format. Use _extract_ipheader(packet, prn)')
+        return
+
+    print('Datagram SIZE \t: %s' %ipheader.entire_packet_length)
+    print('Protocol \t: %s' %ipheader.protocol)
+    print('Source IP \t: %s' %ipheader.source_ip)
+    print('Destination IP \t: %s' %ipheader.destination_ip)
+
+
+def _print_icmp_header(icmp_header):
+
+    if type(icmp_header).__name__.__ne__('icmp_header_format'):
+        print('Wrong format. Use _extract_icmp_header(packet, start_offset, prn)')
+        return
+
+    print('ICMP type \t: %s' %icmp_header.type)
+    print('ICMP code \t: %s' %icmp_header.code)
+    print('ICMP checksum \t: %s' %icmp_header.header_checksum)
+    print('ICMP message \t: %s' %icmp_header.icmp_message)
+
 
 
 
