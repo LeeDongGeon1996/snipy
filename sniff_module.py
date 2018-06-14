@@ -41,32 +41,40 @@ def finish_sniffing(sniffer):
         sniffer.ioctl(SIO_RCVALL, RCVALL_OFF)
 
 
-def sniffing_one_packet(host, prn=None):
+def sniffing_one_packet(host, src_filter=None, dst_filter=None, prn=None):
 
     sniffer = prepare_sniffing(host)
+    packet = _filtering_packet(sniffer, src_filter, dst_filter)
 
-    packet = sniffer.recvfrom(65565)
-
-    if prn is print:
-        print('[Sniff One Packet]')
-        print('----------Packet[%s]----------' % packet[1][0])
-        print(packet[0])
+    if(packet):
+        if prn is print:
+            print('[Sniff One Packet]')
+            print('----------Packet[%s]----------' % packet[1][0])
+            print(packet[0])
 
     finish_sniffing(sniffer)
 
+    return packet
 
-def sniffing_one_header(host, prn=None):
+
+def sniffing_one_header_bite(host, src_filter=None, dst_filter=None, prn=None):
 
     sniffer = prepare_sniffing(host)
+    packet = _filtering_packet(sniffer, src_filter, dst_filter)
+    header_bite = None
 
-    packet = sniffer.recvfrom(65565)
-
-    if prn is print:
-        print('[Sniff One Packet Header]')
-        print('----------Packet[%s]----------' % packet[1][0])
-        print(packet[0][:20])
+    if(packet):
+        src_ip = packet[1][0]
+        header_bite = packet[0][:20]
+        
+        if prn is print:
+            print('[Sniff One Packet Header]')
+            print('----------Packet[%s]----------' %src_ip)
+            print(header_bite)
 
     finish_sniffing(sniffer)
+
+    return header_bite
 
 
 def sniffing_all(host, src_filter=None, dst_filter=None, file_name=None):
@@ -81,23 +89,15 @@ def sniffing_all(host, src_filter=None, dst_filter=None, file_name=None):
     try:
         while True:
             icmp_header = None
-            packet = sniffer.recvfrom(65565)
-
-            #source IP filter
-            if src_filter is not None:
-                if packet[1][0] not in src_filter:
-                    continue
+            
+            packet = _filtering_packet(sniffer, src_filter, dst_filter)
+            if packet is None:
+                continue
 
             ipheader = _extract_ipheader(packet)
 
-            #destination IP filter
-            if dst_filter is not None:
-                if ipheader.destination_ip not in dst_filter:
-                    continue
-
             count += 1
             print('\n#####%d PACKET######' %count)
-            #print('adress : ' + str(packet[1]))
             _print_ipheader(ipheader)
 
             if file_name is not None:
@@ -205,6 +205,22 @@ def _extract_ipheader(packet, prn=None):
         print(formatted)
     
     return formatted
+
+def _filtering_packet(sniffer, src_filter=None, dst_filter=None):
+
+    packet = sniffer.recvfrom(65565)
+
+    #source IP filter
+    if src_filter is not None:
+        if packet[1][0] not in src_filter:
+            return None
+
+    #destination IP filter
+    if dst_filter is not None:
+        if get_destination_ip(packet[0][16:20]) not in dst_filter:
+            return None
+
+    return packet
 
 
 def _print_ipheader(ipheader):
