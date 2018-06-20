@@ -105,10 +105,13 @@ def sniffing_all(host, src_filter=None, dst_filter=None, file_name=None):
                 continue
 
             ipheader = _extract_ipheader(packet)
-
+            if ipheader.protocol is not 'UDP':
+                continue
             count += 1
             print('\n#####%d PACKET######' %count)
             _print_ipheader(ipheader)
+
+
 
             if file_name is not None:
                 fd.write('\n\n' + str(ipheader) + '\n')
@@ -121,6 +124,12 @@ def sniffing_all(host, src_filter=None, dst_filter=None, file_name=None):
                 if file_name is not None:
                     fd.write(str(icmp_header) + '\n')
                     fd.write(str(packet[0][ipheader.header_length+len(icmp_header):]) + '\n')
+            
+            elif ipheader.protocol is 'UDP':
+                udp_header = _extract_udp_header(packet, ipheader.header_length)
+                _print_udp_header(udp_header)
+                print('data : %s' %packet[0][ipheader.header_length+len(udp_header):])
+            
             else:
                 print('data : %s' %packet[0][ipheader.header_length:])
                 if file_name is not None:
@@ -147,6 +156,33 @@ def sniffing_all_bite(host):
             print('Payload : %s' % packet[0][21:])
     except KeyboardInterrupt:
         finish_sniffing(sniffer)
+
+def _extract_udp_header(packet, start_offset, prn=False):
+    
+    raw_udp_header = packet[0][start_offset:start_offset+8]
+
+    #2,2,2,2
+    unpacked = struct.unpack('!HHHH', raw_udp_header)
+
+    format_element = [
+        'source_port',
+        'destination_port',
+        'udp_packet_length',
+        'udp_header_checksum'
+    ]
+    udp_header_format = namedtuple('udp_header_format', format_element)
+
+    formatted = udp_header_format(
+        unpacked[0],
+        unpacked[1],
+        unpacked[2],
+        unpacked[3]
+    )
+
+    if (prn):
+        print(formatted)
+    
+    return formatted
 
 def _extract_icmp_header(packet, start_offset, prn=False):
 
@@ -260,6 +296,16 @@ def _print_icmp_header(icmp_header):
     print('ICMP message \t: %s' %icmp_header.icmp_message)
 
 
+def _print_udp_header(udp_header):
+    if type(udp_header).__name__.__ne__('udp_header_format'):
+        print('Wrong format. Use _extract_udp_header(packet, start_offset, prn)')
+        return
+
+    print('UDP source port \t: %s' %udp_header.source_port)
+    print('UDP destination_port \t: %s' %udp_header.destination_port)
+    print('UDP packet_length \t: %s' %udp_header.udp_packet_length)
+    print('UDP header_checksum \t: %s' %udp_header.udp_header_checksum)
+
 
 
 
@@ -294,7 +340,17 @@ def get_source_ip(ipheader):return inet_ntoa(ipheader)
 def get_destination_ip(ipheader):return inet_ntoa(ipheader)
 
 def get_icmp_type(icmp_header):
-    types = {0:'ICMP Echo Reply', 3:'Destination Unreachable', 8:'ICMP Echo Request'}
+    types = {
+        0:'ICMP Echo Reply',
+        3:'Destination Unreachable',
+        4:'Source Quench(NOT STANDARD)',
+        5:'Redirect',
+        8:'ICMP Echo Request',
+        9:'Router Advertisement',
+        10:'Router Solicitation',
+        11:'Time Exceeded',
+        12:'Parameter Problem'
+    }
 
     if icmp_header in types:
         return types[icmp_header] + '[' + str(icmp_header) + ']'
@@ -302,7 +358,12 @@ def get_icmp_type(icmp_header):
         return 'OTHERS : ' + str(icmp_header)
 
 def get_icmp_code(icmp_header):
-    codes = {3:'Port Unreachable'}
+    codes = {
+        0:'Network Unreachable',
+        1:'Host Unreachable',
+        2:'Protocol Unreachable',
+        3:'Port Unreachable'
+    }
 
     if icmp_header in codes:
         return codes[icmp_header] + '[' + str(icmp_header) + ']'
@@ -312,3 +373,11 @@ def get_icmp_code(icmp_header):
 def get_icmp_header_checksum(icmp_header):return int(icmp_header)
 
 def get_icmp_message(icmp_header):return str(icmp_header)
+
+def get_udp_source_port(udp_header):return udp_header
+    
+def get_udp_destination_port(udp_header):return udp_header
+    
+def get_udp_packet_length(udp_header):return udp_header
+
+def get_udp_checksum(udp_header):return udp_header
