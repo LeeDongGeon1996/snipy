@@ -41,15 +41,17 @@ def finish_sniffing(sniffer):
         sniffer.ioctl(SIO_RCVALL, RCVALL_OFF)
 
 
-def sniffing_one_packet(host, src_filter=None, dst_filter=None, prn=None):
+def sniffing_one_packet_bite(host, src_filter=None, dst_filter=None, prn=False):
 
     sniffer = prepare_sniffing(host)
     packet = _filtering_packet(sniffer, src_filter, dst_filter)
 
     if(packet):
-        if prn is print:
+        if (prn):
+            src_ip = packet[1][0]
+
             print('[Sniff One Packet]')
-            print('----------Packet[%s]----------' % packet[1][0])
+            print('----------Packet[%s]----------' %src_ip)
             print(packet[0])
 
     finish_sniffing(sniffer)
@@ -57,22 +59,27 @@ def sniffing_one_packet(host, src_filter=None, dst_filter=None, prn=None):
     return packet
 
 
-def sniffing_one_header_bite(host, src_filter=None, dst_filter=None, prn=None):
+def sniffing_one_header_bite(host, src_filter=None, dst_filter=None, prn=False):
 
-    sniffer = prepare_sniffing(host)
-    packet = _filtering_packet(sniffer, src_filter, dst_filter)
+    #version 2.1
+    #sniffer = prepare_sniffing(host)
+    #packet = _filtering_packet(sniffer, src_filter, dst_filter)
+    
+    #version 2.2
+    packet = sniffing_one_packet_bite(host, src_filter, dst_filter)
+    
     header_bite = None
 
     if(packet):
         src_ip = packet[1][0]
         header_bite = packet[0][:20]
         
-        if prn is print:
+        if (prn):
             print('[Sniff One Packet Header]')
             print('----------Packet[%s]----------' %src_ip)
             print(header_bite)
 
-    finish_sniffing(sniffer)
+    #finish_sniffing(sniffer)
 
     return header_bite
 
@@ -106,11 +113,13 @@ def sniffing_all(host, src_filter=None, dst_filter=None, file_name=None):
             if ipheader.protocol is 'ICMP':
                 icmp_header = _extract_icmp_header(packet, ipheader.header_length)
                 _print_icmp_header(icmp_header)
-                
+                print('data : %s' %packet[0][ipheader.header_length+8:])
+
                 if file_name is not None:
                     fd.write(str(icmp_header) + '\n')
                     fd.write(str(packet[0][ipheader.header_length+len(icmp_header):]) + '\n')
             else:
+                print('data : %s' %packet[0][ipheader.header_length:])
                 if file_name is not None:
                     fd.write(str(packet[0][ipheader.header_length:]) + '\n')
             
@@ -130,12 +139,13 @@ def sniffing_all_bite(host):
     try:
         while input("continue?") == '':
             packet = sniffer.recvfrom(65565)
+            print(packet)
             print('[%s] HEADER : %s' % (packet[1][0], packet[0][:20]))
             print('Payload : %s' % packet[0][21:])
     except KeyboardInterrupt:
         finish_sniffing(sniffer)
 
-def _extract_icmp_header(packet, start_offset, prn=None):
+def _extract_icmp_header(packet, start_offset, prn=False):
 
     raw_icmp_header = packet[0][start_offset:start_offset+8]
 
@@ -157,13 +167,13 @@ def _extract_icmp_header(packet, start_offset, prn=None):
         get_icmp_message(unpacked[3])
     )
     
-    if prn is print:
+    if (prn):
         print(formatted)
     
     return formatted
 
 
-def _extract_ipheader(packet, prn=None):
+def _extract_ipheader(packet, prn=False):
 
     raw_ipheader = packet[0][:20]
 
@@ -201,7 +211,7 @@ def _extract_ipheader(packet, prn=None):
         get_destination_ip(unpacked[9])
         )
     
-    if prn is print:
+    if (prn):
         print(formatted)
     
     return formatted
