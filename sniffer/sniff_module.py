@@ -19,6 +19,9 @@ def prepare_sniffing(host):
     if os.name is 'nt':
         print('Log[1] : OS is WINDOW')
         sock_protocol = IPPROTO_IP
+    elif os.name is 'posix':
+        print('Log[1] : OS is POSIX')
+        sock_protocol = IPPROTO_UDP
     else:
         print('Log[1] : OS isn\'t WINDOW')
         sock_protocol = IPPROTO_ICMP
@@ -113,7 +116,7 @@ def sniffing_all(host, src_filter=None, dst_filter=None, file_name=None):
             if ipheader.protocol is 'ICMP':
                 icmp_header = _extract_icmp_header(packet, ipheader.header_length)
                 _print_icmp_header(icmp_header)
-                print('data : %s' %packet[0][ipheader.header_length+8:])
+                print('data : %s' %packet[0][ipheader.header_length+len(icmp_header):])
 
                 if file_name is not None:
                     fd.write(str(icmp_header) + '\n')
