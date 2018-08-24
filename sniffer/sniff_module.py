@@ -130,50 +130,13 @@ def sniffing_all(host, src_filter=None, dst_filter=None, file_name=None):
                 rtp_header = _extract_rtp_header(packet, ipheader.header_length+udp_header_size, True)
                 if rtp_header:
                     rtp_payload_header = _extract_rtp_payload_header(packet, ipheader.header_length+udp_header_size+rtp_header_size, True)
-                    
-                    idx = rtp_payload_header.mode_index
-                    if idx > 4:
-                        print('big')
-                        continue
-                    if idx <1:
-                        print('small')
-                        continue
-
                     rtp_payload = packet[0][ipheader.header_length+udp_header_size+rtp_header_size+rtp_payload_header_size:]
                     print('RTP Payload : %s' %rtp_payload)
 
                     if file_name is not None:
                         fd.write(rtp_payload)
 
-                        '''
-                        convert = rtp_payload.replace(b'\xff', b'\x00')
-                        print('converted : %s' %convert)
-                        fd.write(convert)
-                        '''
-                        
-                        ''' 
-                        to_write = packet[0][ipheader.header_length+len(udp_header)+len(rtp_header):]
-                        write_list=[]
-                        for x in to_write:
-                            convert = hex(x).replace('0x', '', 1)
-                            if len(convert) is 1:
-                                convert = '0' + convert
-                            write_list.append(convert)
-                            print(convert)
-                            #write_list.append(hex(x))
-                        
-                        print(write_list)
-                        for sample in write_list:
-                            raw_sample = " ".join(sample)
-                            #print(raw_sample)
-                            #print('samplw : %s' %sample)
-                            write_sample = bytearray.fromhex(sample)
-                            fd.write(write_sample)
-                            print(write_sample)
-                        '''
-
-
-                #Printing UDP payload.
+                #Print UDP Payload
                 #print('UDP Payload : %s' %packet[0][ipheader.header_length+len(udp_header):])
             
             else:
