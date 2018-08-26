@@ -3,22 +3,10 @@ import os
 import struct
 from collections import namedtuple
 
-version_header_length = 0
-service_type = 1
-entire_packet_length = 2
-datagram_id = 3
-flag_fragment_offset = 4
-time_to_live = 5
-protocol = 6
-header_checksum = 7
-source_ip = 8
-destination_ip = 9
-
 ip_header_size = 20
 icmp_header_size = 8
 udp_header_size = 8
 rtp_header_size = 12
-rtp_payload_header_size = 1
 
 def prepare_sniffing(host):
     if os.name is 'nt':
@@ -112,7 +100,7 @@ def sniffing_all(host, src_filter=None, dst_filter=None, file_name=None):
                 icmp_header = _extract_icmp_header(ip_payload)
                 icmp_payload = ip_payload[icmp_header_size:]
                 _print_icmp_header(icmp_header)
-                print('ICMP Payload : %s' %icmp_payload)
+                _print_payload(icmp_payload)
 
                 if file_name is not None:
                     fd.write(str(icmp_header) + '\n')
@@ -126,9 +114,7 @@ def sniffing_all(host, src_filter=None, dst_filter=None, file_name=None):
                 rtp_header = _extract_rtp_header(udp_payload, True)
                 if rtp_header:
                     rtp_payload = udp_payload[rtp_header_size:]
-                    rtp_payload_header = _extract_rtp_payload_header(rtp_payload, True)
-                    sample_data = rtp_payload[rtp_payload_header:]
-                    _print_sample_data(sample_data)
+                    _print_payload(rtp_payload)
 
                     if file_name is not None:
                         fd.write(rtp_payload)
@@ -136,7 +122,7 @@ def sniffing_all(host, src_filter=None, dst_filter=None, file_name=None):
                     print('Not RTP packet.')
             
             else:
-                print('data : %s' %ip_payload)
+                _print_payload(ip_payload)
                 if file_name is not None:
                     fd.write(str(ip_payload) + '\n')
             
@@ -300,33 +286,6 @@ def _extract_rtp_header(packet, prn=False):
 
     return formatted
 
-def _extract_rtp_payload_header(packet, prn=False):
-    
-    try:
-        raw_rtp_payload_header = packet[rtp_payload_header_size]
-        #1
-        unpacked = struct.unpack('!B', raw_rtp_payload_header)
-
-    except:
-        return None
-
-    format_element = [
-            'reserved',     #5 bits
-            'mode_index'    #3 bits
-            ]
-
-    rtp_payload_header_format = namedtuple('rtp_payload_header_format', format_element)
-
-    formatted = rtp_payload_header_format(
-            _get_rtp_payload_reserved(unpacked[0]),
-            _get_rtp_payload_mode_index(unpacked[0])
-            )
-
-    if (prn):
-        print(formatted)
-
-    return formatted
-
 def _filtering_packet(sniffer, src_filter=None, dst_filter=None):
 
     packet = sniffer.recvfrom(65565)
@@ -378,11 +337,13 @@ def _print_udp_header(udp_header):
     print('UDP packet_length \t: %s' %udp_header.udp_packet_length)
     print('UDP header_checksum \t: %s' %udp_header.udp_header_checksum)
 
-def _print_sample_data(sample_data):
-    print('Sample Data : ')
+def _print_payload(payload):
+    print('Payload : ')
     try:
-        for x in sample_data:
-            print('%X ' %x, end='')
+        for x in payload:
+            print('%02X ' %x, end='')
+
+        print()
 
     except:
         print('Wrong format.')
