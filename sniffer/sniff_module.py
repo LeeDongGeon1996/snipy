@@ -14,6 +14,7 @@ header_checksum = 7
 source_ip = 8
 destination_ip = 9
 
+ip_header_size = 20
 icmp_header_size = 8
 udp_header_size = 8
 rtp_header_size = 12
@@ -68,25 +69,18 @@ def sniffing_one_packet_bite(host, src_filter=None, dst_filter=None, prn=False):
 
 def sniffing_one_header_bite(host, src_filter=None, dst_filter=None, prn=False):
 
-    #version 2.1
-    #sniffer = prepare_sniffing(host)
-    #packet = _filtering_packet(sniffer, src_filter, dst_filter)
-    
-    #version 2.2
     packet = sniffing_one_packet_bite(host, src_filter, dst_filter)
     
     header_bite = None
 
     if(packet):
         src_ip = packet[1][0]
-        header_bite = packet[0][:20]
+        header_bite = packet[0][:ip_header_size]
         
         if (prn):
             print('[Sniff One Packet Header]')
             print('----------Packet[%s]----------' %src_ip)
             print(header_bite)
-
-    #finish_sniffing(sniffer)
 
     return header_bite
 
@@ -98,53 +92,54 @@ def sniffing_all(host, src_filter=None, dst_filter=None, file_name=None):
     if file_name is not None:
         fd = open(file_name, 'wb+')
 
-    print('[Start Sniffing All]')
     count = 0
+    print('[Start Sniffing All]')
     try:
         while True:
-            icmp_header = None
-            
-            packet = _filtering_packet(sniffer, src_filter, dst_filter)
+            packet = _filtering_packet(sniffer, src_filter, dst_filter)[0]
             if packet is None:
                 continue
 
-            ipheader = _extract_ipheader(packet)
-            
-            count += 1
-            print('\n#####%d PACKET######' %count)
-            _print_ipheader(ipheader)
+            ip_header = _extract_ipheader(packet)
+            ip_payload = packet[ip_header.header_length:]
 
-            if ipheader.protocol is 'ICMP':
-                icmp_header = _extract_icmp_header(packet, ipheader.header_length)
+            count+=1
+            print('\n#####%d PACKET######' %count)
+            _print_ipheader(ip_header)
+
+            if ip_header.protocol is 'ICMP':
+                icmp_header = _extract_icmp_header(ip_payload)
+                icmp_payload = ip_payload[icmp_header_size:]
+
                 _print_icmp_header(icmp_header)
-                print('ICMP Payload : %s' %packet[0][ipheader.header_length+icmp_header_size:])
+                print('ICMP Payload : %s' %icmp_payload)
 
                 if file_name is not None:
                     fd.write(str(icmp_header) + '\n')
-                    fd.write(str(packet[0][ipheader.header_length+icmp_header_size:]) + '\n')
+                    fd.write(str(icmp_payload) + '\n')
             
-            elif ipheader.protocol is 'UDP':
-                udp_header = _extract_udp_header(packet, ipheader.header_length)
+            elif ip_header.protocol is 'UDP':
+                udp_header = _extract_udp_header(ip_payload)
+                udp_payload = ip_payload[udp_header_size:]
                 _print_udp_header(udp_header)
 
-                rtp_header = _extract_rtp_header(packet, ipheader.header_length+udp_header_size, True)
+                rtp_header = _extract_rtp_header(udp_payload, True)
                 if rtp_header:
-                    rtp_payload_header = _extract_rtp_payload_header(packet, ipheader.header_length+udp_header_size+rtp_header_size, True)
-                    rtp_payload = packet[0][ipheader.header_length+udp_header_size+rtp_header_size+rtp_payload_header_size:]
-                    print('RTP Payload : %s' %rtp_payload)
+                    rtp_payload = udp_payload[rtp_header_size:]
+                    rtp_payload_header = _extract_rtp_payload_header(rtp_payload, True)
+                    sample_data = rtp_payload[rtp_payload_header:]
+                    _print_sample_data(sample_data)
 
                     if file_name is not None:
                         fd.write(rtp_payload)
-
-                #Print UDP Payload
-                #print('UDP Payload : %s' %packet[0][ipheader.header_length+len(udp_header):])
+                else:
+                    print('Not RTP packet.')
             
             else:
-                print('data : %s' %packet[0][ipheader.header_length:])
+                print('data : %s' %ip_payload)
                 if file_name is not None:
-                    fd.write(str(packet[0][ipheader.header_length:]) + '\n')
+                    fd.write(str(ip_payload) + '\n')
             
-
     except KeyboardInterrupt:
         finish_sniffing(sniffer)
 
@@ -161,14 +156,14 @@ def sniffing_all_bite(host):
         while input("continue?") == '':
             packet = sniffer.recvfrom(65565)
             print(packet)
-            print('[%s] HEADER : %s' % (packet[1][0], packet[0][:20]))
-            print('Payload : %s' % packet[0][21:])
+            print('[%s] HEADER : %s' % (packet[1][0], packet[0][:ip_header_size]))
+            print('Payload : %s' % packet[0][ip_header_size:])
     except KeyboardInterrupt:
         finish_sniffing(sniffer)
 
-def _extract_udp_header(packet, start_offset, prn=False):
+def _extract_udp_header(packet, prn=False):
     
-    raw_udp_header = packet[0][start_offset:start_offset+8]
+    raw_udp_header = packet[:udp_header_size]
 
     #2,2,2,2
     unpacked = struct.unpack('!HHHH', raw_udp_header)
@@ -182,10 +177,10 @@ def _extract_udp_header(packet, start_offset, prn=False):
     udp_header_format = namedtuple('udp_header_format', format_element)
 
     formatted = udp_header_format(
-        unpacked[0],
-        unpacked[1],
-        unpacked[2],
-        unpacked[3]
+        unpacked[0],    #16bits
+        unpacked[1],    #16bits
+        unpacked[2],    #16bits
+        unpacked[3]     #16bits
     )
 
     if (prn):
@@ -193,26 +188,26 @@ def _extract_udp_header(packet, start_offset, prn=False):
     
     return formatted
 
-def _extract_icmp_header(packet, start_offset, prn=False):
+def _extract_icmp_header(packet, prn=False):
 
-    raw_icmp_header = packet[0][start_offset:start_offset+8]
+    raw_icmp_header = packet[:icmp_header_size]
 
     #1,1,2,4
     unpacked = struct.unpack('!BBH4s', raw_icmp_header)
 
     format_element = [
-        'type',
-        'code',
-        'header_checksum',
-        'icmp_message'
+        'type',             #8 bits
+        'code',             #8 bits
+        'header_checksum',  #16bits
+        'icmp_message'      #32bits
     ]
     icmp_header_format = namedtuple('icmp_header_format', format_element)
 
     formatted = icmp_header_format(
-        get_icmp_type(unpacked[0]),
-        get_icmp_code(unpacked[1]),
-        get_icmp_header_checksum(unpacked[2]),
-        get_icmp_message(unpacked[3])
+        _get_icmp_type(unpacked[0]),
+        _get_icmp_code(unpacked[1]),
+        _get_icmp_header_checksum(unpacked[2]),
+        _get_icmp_message(unpacked[3])
     )
     
     if (prn):
@@ -223,40 +218,40 @@ def _extract_icmp_header(packet, start_offset, prn=False):
 
 def _extract_ipheader(packet, prn=False):
 
-    raw_ipheader = packet[0][:20]
+    raw_ipheader = packet[:ip_header_size]
 
     #1,1,2,2,2,1,1,2,4,4
     unpacked = struct.unpack('!BBHHHBBH4s4s', raw_ipheader)
     
     format_element = [
-        'version',
-        'header_length', 
-        'service_type', 
-        'entire_packet_length',
-        'datagram_id',
-        'flag',
-        'fragment_offset',
-        'time_to_live',
-        'protocol',
-        'header_checksum',
-        'source_ip',
-        'destination_ip'
+        'version',              #4 bits
+        'header_length',        #4 bits
+        'service_type',         #8 bits
+        'entire_packet_length', #16bits
+        'datagram_id',          #16bits
+        'flag',                 #3 bits
+        'fragment_offset',      #13bits
+        'time_to_live',         #8 bits
+        'protocol',             #8 bits
+        'header_checksum',      #16bits
+        'source_ip',            #32bits
+        'destination_ip'        #32bits
     ]
     ipheader_format = namedtuple('ipheader_format', format_element)
     
     formatted = ipheader_format(
-        get_version(unpacked[0]),
-        get_header_length(unpacked[0]),
-        get_service_type(unpacked[1]),
-        get_entire_packet_length(unpacked[2]),
-        get_datagram_id(unpacked[3]),
-        get_flag(unpacked[4]),
-        get_fragment_offset(unpacked[4]),
-        get_time_to_live(unpacked[5]),
-        get_protocol(unpacked[6]),
-        get_header_ckecksum(unpacked[7]),
-        get_source_ip(unpacked[8]),
-        get_destination_ip(unpacked[9])
+        _get_version(unpacked[0]),
+        _get_header_length(unpacked[0]),
+        _get_service_type(unpacked[1]),
+        _get_entire_packet_length(unpacked[2]),
+        _get_datagram_id(unpacked[3]),
+        _get_flag(unpacked[4]),
+        _get_fragment_offset(unpacked[4]),
+        _get_time_to_live(unpacked[5]),
+        _get_protocol(unpacked[6]),
+        _get_header_ckecksum(unpacked[7]),
+        _get_source_ip(unpacked[8]),
+        _get_destination_ip(unpacked[9])
         )
     
     if (prn):
@@ -264,10 +259,10 @@ def _extract_ipheader(packet, prn=False):
     
     return formatted
 
-def _extract_rtp_header(packet, start_offset, prn=False):
+def _extract_rtp_header(packet, prn=False):
 
     try:
-        raw_rtp_header = packet[0][start_offset:start_offset+12]
+        raw_rtp_header = packet[:rtp_header_size]
 
         #1,1,2,4,4
         unpacked = struct.unpack('!BBHLL', raw_rtp_header)
@@ -289,15 +284,15 @@ def _extract_rtp_header(packet, start_offset, prn=False):
     rtp_header_format = namedtuple('rtp_header_format', format_element)
     
     formatted = rtp_header_format(
-            get_rtp_version(unpacked[0]),
-            get_rtp_padding(unpacked[0]),
-            get_rtp_extension(unpacked[0]),
-            get_rtp_CSRC_count(unpacked[0]),
-            get_rtp_marker(unpacked[1]),
-            get_rtp_payload_type(unpacked[1]),
-            get_rtp_sequence_num(unpacked[2]),
-            get_rtp_timestamp(unpacked[3]),
-            get_rtp_SSRC(unpacked[4])
+            _get_rtp_version(unpacked[0]),
+            _get_rtp_padding(unpacked[0]),
+            _get_rtp_extension(unpacked[0]),
+            _get_rtp_CSRC_count(unpacked[0]),
+            _get_rtp_marker(unpacked[1]),
+            _get_rtp_payload_type(unpacked[1]),
+            _get_rtp_sequence_num(unpacked[2]),
+            _get_rtp_timestamp(unpacked[3]),
+            _get_rtp_SSRC(unpacked[4])
             )
 
     if (prn):
@@ -305,11 +300,10 @@ def _extract_rtp_header(packet, start_offset, prn=False):
 
     return formatted
 
-def _extract_rtp_payload_header(packet, start_offset, prn=False):
+def _extract_rtp_payload_header(packet, prn=False):
     
     try:
-        raw_rtp_payload_header = packet[0][start_offset:start_offset+1]
-        print("payhead : %s" %raw_rtp_payload_header)
+        raw_rtp_payload_header = packet[rtp_payload_header_size]
         #1
         unpacked = struct.unpack('!B', raw_rtp_payload_header)
 
@@ -324,8 +318,8 @@ def _extract_rtp_payload_header(packet, start_offset, prn=False):
     rtp_payload_header_format = namedtuple('rtp_payload_header_format', format_element)
 
     formatted = rtp_payload_header_format(
-            get_rtp_payload_reserved(unpacked[0]),
-            get_rtp_payload_mode_index(unpacked[0])
+            _get_rtp_payload_reserved(unpacked[0]),
+            _get_rtp_payload_mode_index(unpacked[0])
             )
 
     if (prn):
@@ -365,7 +359,7 @@ def _print_ipheader(ipheader):
 def _print_icmp_header(icmp_header):
 
     if type(icmp_header).__name__.__ne__('icmp_header_format'):
-        print('Wrong format. Use _extract_icmp_header(packet, start_offset, prn)')
+        print('Wrong format. Use _extract_icmp_header(packet, prn)')
         return
 
     print('ICMP type \t: %s' %icmp_header.type)
@@ -376,13 +370,23 @@ def _print_icmp_header(icmp_header):
 
 def _print_udp_header(udp_header):
     if type(udp_header).__name__.__ne__('udp_header_format'):
-        print('Wrong format. Use _extract_udp_header(packet, start_offset, prn)')
+        print('Wrong format. Use _extract_udp_header(packet, prn)')
         return
 
     print('UDP source port \t: %s' %udp_header.source_port)
     print('UDP destination_port \t: %s' %udp_header.destination_port)
     print('UDP packet_length \t: %s' %udp_header.udp_packet_length)
     print('UDP header_checksum \t: %s' %udp_header.udp_header_checksum)
+
+def _print_sample_data(sample_data):
+    print('Sample Data : ')
+    try:
+        for x in sample_data:
+            print('%X ' %x, end='')
+
+    except:
+        print('Wrong format.')
+        return
 
 def _select_protocol():
    
@@ -404,36 +408,36 @@ def _select_protocol():
 
 
 # (xxxx)(xxxx)에서 앞의 4자리가 버전을 나타냄. 뒤의 4자리를 버리기위해 쉬프트연산.
-def get_version(ipheader):return int((ipheader & 0xF0) >> 4)
+def _get_version(ipheader):return int((ipheader & 0xF0) >> 4)
 # (xxxx)(xxxx)에서 뒤의 4자리가 길이를 나타냄. 4바이트단위로 나타냈기 때문에 4를 곱하기위해 쉬프트연산.
-def get_header_length(ipheader):return int((ipheader & 0x0F) << 2)
+def _get_header_length(ipheader):return int((ipheader & 0x0F) << 2)
 
-def get_service_type(ipheader):return ipheader
+def _get_service_type(ipheader):return ipheader
 
-def get_entire_packet_length(ipheader):return int(ipheader)
+def _get_entire_packet_length(ipheader):return int(ipheader)
 
-def get_datagram_id(ipheader):return int(ipheader)
+def _get_datagram_id(ipheader):return int(ipheader)
 
-def get_flag(ipheader):return ((ipheader & 0xE0) >> 5)
+def _get_flag(ipheader):return ((ipheader & 0xE0) >> 5)
 
-def get_fragment_offset(ipheader):return (ipheader & 0x1F)
+def _get_fragment_offset(ipheader):return (ipheader & 0x1F)
 
-def get_time_to_live(ipheader):return ipheader
+def _get_time_to_live(ipheader):return ipheader
 
-def get_protocol(ipheader):
+def _get_protocol(ipheader):
     protocols = {1:'ICMP', 6:'TCP', 17:'UDP', 18:'MUX', 27:'RDP'}
     if ipheader in protocols:
         return protocols[ipheader]
     else:
         return 'OTHERS : ' + str(ipheader)
 
-def get_header_ckecksum(ipheader):return ipheader
+def _get_header_ckecksum(ipheader):return ipheader
 
-def get_source_ip(ipheader):return inet_ntoa(ipheader)
+def _get_source_ip(ipheader):return inet_ntoa(ipheader)
 
-def get_destination_ip(ipheader):return inet_ntoa(ipheader)
+def _get_destination_ip(ipheader):return inet_ntoa(ipheader)
 
-def get_icmp_type(icmp_header):
+def _get_icmp_type(icmp_header):
     types = {
         0:'ICMP Echo Reply',
         3:'Destination Unreachable',
@@ -451,7 +455,7 @@ def get_icmp_type(icmp_header):
     else:
         return 'OTHERS : ' + str(icmp_header)
 
-def get_icmp_code(icmp_header):
+def _get_icmp_code(icmp_header):
     codes = {
         0:'Network Unreachable',
         1:'Host Unreachable',
@@ -464,38 +468,38 @@ def get_icmp_code(icmp_header):
     else:
         return 'OTHERS : ' + str(icmp_header)
 
-def get_icmp_header_checksum(icmp_header):return int(icmp_header)
+def _get_icmp_header_checksum(icmp_header):return int(icmp_header)
 
-def get_icmp_message(icmp_header):return str(icmp_header)
+def _get_icmp_message(icmp_header):return str(icmp_header)
 
-def get_udp_source_port(udp_header):return udp_header
+def _get_udp_source_port(udp_header):return udp_header
     
-def get_udp_destination_port(udp_header):return udp_header
+def _get_udp_destination_port(udp_header):return udp_header
     
-def get_udp_packet_length(udp_header):return udp_header
+def _get_udp_packet_length(udp_header):return udp_header
 
-def get_udp_checksum(udp_header):return udp_header
+def _get_udp_checksum(udp_header):return udp_header
 
-def get_rtp_version(rtp_header):return int((rtp_header & 0b11000000) >> 6)
+def _get_rtp_version(rtp_header):return int((rtp_header & 0b11000000) >> 6)
 
-def get_rtp_padding(rtp_header):return int((rtp_header & 0b00100000) >> 5)
+def _get_rtp_padding(rtp_header):return int((rtp_header & 0b00100000) >> 5)
 
-def get_rtp_extension(rtp_header):return int((rtp_header & 0b00010000) >> 4)
+def _get_rtp_extension(rtp_header):return int((rtp_header & 0b00010000) >> 4)
 
-def get_rtp_CSRC_count(rtp_header):return int(rtp_header & 0x0F)
+def _get_rtp_CSRC_count(rtp_header):return int(rtp_header & 0x0F)
 
-def get_rtp_marker(rtp_header):return int((rtp_header & 0b10000000) >> 7)
+def _get_rtp_marker(rtp_header):return int((rtp_header & 0b10000000) >> 7)
 
-def get_rtp_payload_type(rtp_header):return (rtp_header & 0x7F)
+def _get_rtp_payload_type(rtp_header):return (rtp_header & 0x7F)
 
-def get_rtp_sequence_num(rtp_header):return rtp_header
+def _get_rtp_sequence_num(rtp_header):return rtp_header
 
-def get_rtp_timestamp(rtp_header):return (rtp_header)
+def _get_rtp_timestamp(rtp_header):return (rtp_header)
 
-def get_rtp_SSRC(rtp_header):return str(rtp_header)
+def _get_rtp_SSRC(rtp_header):return str(rtp_header)
 
-def get_rtp_payload_reserved(rtp_payload_header):return ((rtp_payload_header & 0xF8) >> 3)
+def _get_rtp_payload_reserved(rtp_payload_header):return ((rtp_payload_header & 0xF8) >> 3)
 
-def get_rtp_payload_mode_index(rtp_payload_header):return int(rtp_payload_header & 0x07)
+def _get_rtp_payload_mode_index(rtp_payload_header):return int(rtp_payload_header & 0x07)
 
 
