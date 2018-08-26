@@ -96,9 +96,10 @@ def sniffing_all(host, src_filter=None, dst_filter=None, file_name=None):
     print('[Start Sniffing All]')
     try:
         while True:
-            packet = _filtering_packet(sniffer, src_filter, dst_filter)[0]
+            packet = _filtering_packet(sniffer, src_filter, dst_filter)
             if packet is None:
                 continue
+            packet = packet[0]
 
             ip_header = _extract_ipheader(packet)
             ip_payload = packet[ip_header.header_length:]
@@ -110,7 +111,6 @@ def sniffing_all(host, src_filter=None, dst_filter=None, file_name=None):
             if ip_header.protocol is 'ICMP':
                 icmp_header = _extract_icmp_header(ip_payload)
                 icmp_payload = ip_payload[icmp_header_size:]
-
                 _print_icmp_header(icmp_header)
                 print('ICMP Payload : %s' %icmp_payload)
 
