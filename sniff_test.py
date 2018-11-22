@@ -17,7 +17,7 @@ def main():
     #sniffing_all(gethostbyname(gethostname()))
     
     #sniffing_all('172.30.1.45')
-    sniffing_all('172.30.1.45', ('172.30.1.60'), file_name='capture_160.raw')
+    sniffing_all('10.20.13.126', ('10.20.5.55'), file_name='capture_160.raw')
     #sniffing_all('10.10.116.158', ('10.10.116.160'))
     #sniffing_all('10.10.116.158', ('10.10.116.160'), file_name='capture_160.raw')
     
