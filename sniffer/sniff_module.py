@@ -88,7 +88,6 @@ def sniffing_all(host, src_filter=None, dst_filter=None, file_name=None):
             if packet is None:
                 continue
             packet = packet[0]
-
             ip_header = _extract_ipheader(packet)
             ip_payload = packet[ip_header.header_length:]
 
@@ -96,17 +95,7 @@ def sniffing_all(host, src_filter=None, dst_filter=None, file_name=None):
             print('\n#####%d PACKET######' %count)
             _print_ipheader(ip_header)
 
-            if ip_header.protocol is 'ICMP':
-                icmp_header = _extract_icmp_header(ip_payload)
-                icmp_payload = ip_payload[icmp_header_size:]
-                _print_icmp_header(icmp_header)
-                _print_payload(icmp_payload)
-
-                if file_name is not None:
-                    fd.write(str(icmp_header) + '\n')
-                    fd.write(str(icmp_payload) + '\n')
-            
-            elif ip_header.protocol is 'UDP':
+            if ip_header.protocol is 'UDP':
                 udp_header = _extract_udp_header(ip_payload)
                 udp_payload = ip_payload[udp_header_size:]
                 _print_udp_header(udp_header)
