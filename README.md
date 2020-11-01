@@ -2,7 +2,9 @@
 This is a sniffing module written in Python and it was used for the research of VoIP security.<br>
 The paper describing this research is available here: 
  * [A study on the risk of taking out specific information by VoIP sniffing technique](https://www.koreascience.or.kr/article/JAKO201810063224583.page)
-   
+
+   이동건 (광운대학교 소프트웨어학과) ; 최웅철 (광운대학교 소프트웨어학과)<br>
+   Received : 2018.11.26 / Accepted : 2018.12.14 / Published : 2018.12.30
    > **Abstract** <br>
    > *Recently, VoIP technology is widely used in our daily life. Even VoIP has become a
 technology that can be easily accessed from services such as home phone as well as
